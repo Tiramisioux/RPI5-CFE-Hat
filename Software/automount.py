@@ -223,8 +223,12 @@ def mount_last_partition(device_node):
         return False
 
 
-def unmountPCIe():
-    """Unmount CFE card and remove PCIe device"""
+def unmountPCIe(is_yank=False):
+    """Unmount CFE card and remove PCIe device
+
+    Args:
+        is_yank: If True, card was yanked so use lazy unmount (instant)
+    """
     global mounted
     global device_node
     global mounted_device_path
@@ -239,8 +243,14 @@ def unmountPCIe():
 
     # Try to unmount the filesystem
     try:
-        logger.info(f"Unmounting filesystem at {mount_path}...")
-        result = os.system(f"sudo umount {mount_path}")
+        if is_yank:
+            # Lazy unmount for yanked cards - instant, no I/O timeout
+            logger.info(f"Using lazy unmount for yanked card at {mount_path}...")
+            result = os.system(f"sudo umount -l {mount_path}")
+        else:
+            # Normal unmount
+            logger.info(f"Unmounting filesystem at {mount_path}...")
+            result = os.system(f"sudo umount {mount_path}")
 
         if result == 0:
             logger.info(f"Successfully unmounted {mount_path}")
@@ -502,7 +512,7 @@ try:
             logger.critical("CARD YANKED - CFE card physically removed!")
             logger.critical("Card was mounted but mechanical insert switch shows card is gone")
             logger.critical("!" * 60)
-            unmountPCIe()
+            unmountPCIe(is_yank=True)  # Use lazy unmount for instant cleanup
 
         # Update button state
         (last_insert_button, last_eject_button) = (insert_button, eject_button)
