@@ -466,8 +466,6 @@ def check_for_yank():
 # ========== MAIN EVENT LOOP ==========
 last_insert_button = 0
 last_eject_button = 0
-yank_check_counter = 0
-YANK_CHECK_INTERVAL = 5  # Check for yank every 0.5 seconds (5 * 0.1s)
 
 logger.info("Performing initial button state check...")
 (insert_button, eject_button) = readButtons()
@@ -498,16 +496,16 @@ try:
             logger.info(">>> EJECT BUTTON PRESSED <<<")
             unmountPCIe()
 
+        # Detect card yank - card is mounted but insert button says card is gone!
+        if mounted == 1 and insert_button == 1:
+            logger.critical("!" * 60)
+            logger.critical("CARD YANKED - CFE card physically removed!")
+            logger.critical("Card was mounted but mechanical insert switch shows card is gone")
+            logger.critical("!" * 60)
+            unmountPCIe()
+
         # Update button state
         (last_insert_button, last_eject_button) = (insert_button, eject_button)
-
-        # Periodically check for card yank
-        yank_check_counter += 1
-        if yank_check_counter >= YANK_CHECK_INTERVAL:
-            yank_check_counter = 0
-            logger.debug(f"Performing yank check (mounted={mounted}, device_node={device_node})")
-            if check_for_yank():
-                logger.warning("Card yank detected and handled")
 
         time.sleep(0.1)
 
