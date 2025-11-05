@@ -6,28 +6,14 @@ import psutil
 import subprocess
 import re
 import logging
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
 import shutil
 
 
 
 # ========== LOGGING SETUP ==========
-# Create logs directory if it doesn't exist
-log_dir = Path("/var/log/cfe-hat")
-log_dir.mkdir(parents=True, exist_ok=True)
-
-# Configure logging with rotating file handler
+# Configure logging for console output only
 logger = logging.getLogger("CFE_AutoMount")
 logger.setLevel(logging.DEBUG)
-
-# Rotating file handler (10MB max, keep 5 old files)
-file_handler = RotatingFileHandler(
-    log_dir / "automount.log",
-    maxBytes=10*1024*1024,  # 10MB
-    backupCount=5
-)
-file_handler.setLevel(logging.DEBUG)
 
 # Console handler
 console_handler = logging.StreamHandler()
@@ -35,13 +21,11 @@ console_handler.setLevel(logging.INFO)
 
 # Formatter with timestamp
 formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    '%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-file_handler.setFormatter(formatter)
 console_handler.setFormatter(formatter)
 
-logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 logger.info("=" * 80)

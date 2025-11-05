@@ -8,37 +8,32 @@ The enhanced `automount.py` script provides robust, production-ready CFE card au
 
 ### 1. Comprehensive Logging System
 
-The script now uses Python's `logging` module with both console and file output:
+The script now uses Python's `logging` module with console output:
 
-- **Log Location**: `/var/log/cfe-hat/automount.log`
-- **Log Rotation**: Automatic rotation at 10MB, keeping 5 backup files
+- **Output**: Console/CLI only (stdout)
 - **Log Levels**: DEBUG, INFO, WARNING, ERROR, CRITICAL
 - **Timestamps**: All log entries include date and time stamps
-
-#### Log Directory Setup
-
-The script automatically creates the log directory:
-```bash
-sudo mkdir -p /var/log/cfe-hat
-```
+- **Format**: `YYYY-MM-DD HH:MM:SS - LEVEL - Message`
 
 #### Viewing Logs
 
-View live logs:
+Since output goes to console, you can redirect it to a file if needed:
+
 ```bash
-tail -f /var/log/cfe-hat/automount.log
+# Run with output redirection
+python3 automount.py > /tmp/automount.log 2>&1
+
+# Run as a service and view with journalctl
+sudo journalctl -u cfe-automount -f
+
+# View live output
+python3 automount.py
 ```
 
-View all logs:
+To save logs manually:
 ```bash
-cat /var/log/cfe-hat/automount.log
-```
-
-Search for specific events:
-```bash
-grep "CARD INSERTION" /var/log/cfe-hat/automount.log
-grep "YANKED" /var/log/cfe-hat/automount.log
-grep "ERROR" /var/log/cfe-hat/automount.log
+# Pipe output to tee for both display and file
+python3 automount.py | tee /tmp/automount.log
 ```
 
 ### 2. Card Yank Detection
@@ -52,14 +47,14 @@ The script now detects when a CFE card is removed without proper unmounting:
 #### Example Yank Detection Log
 
 ```
-2025-11-05 14:32:15 - CFE_AutoMount - CRITICAL - !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-2025-11-05 14:32:15 - CFE_AutoMount - CRITICAL - CARD YANKED - Device removed without unmount!
-2025-11-05 14:32:15 - CFE_AutoMount - CRITICAL - Device /dev/nvme0n1p1 no longer exists
-2025-11-05 14:32:15 - CFE_AutoMount - CRITICAL - !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-2025-11-05 14:32:15 - CFE_AutoMount - WARNING - Attempting to clean up stale mount point /media/RAW...
-2025-11-05 14:32:15 - CFE_AutoMount - INFO - Force unmount successful
-2025-11-05 14:32:15 - CFE_AutoMount - INFO - LED indicator disabled
-2025-11-05 14:32:15 - CFE_AutoMount - WARNING - System ready for new card insertion
+2025-11-05 14:32:15 - CRITICAL - !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+2025-11-05 14:32:15 - CRITICAL - CARD YANKED - Device removed without unmount!
+2025-11-05 14:32:15 - CRITICAL - Device /dev/nvme0n1p1 no longer exists
+2025-11-05 14:32:15 - CRITICAL - !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+2025-11-05 14:32:15 - WARNING - Attempting to clean up stale mount point /media/RAW...
+2025-11-05 14:32:15 - INFO - Force unmount successful
+2025-11-05 14:32:15 - INFO - LED indicator disabled
+2025-11-05 14:32:15 - WARNING - System ready for new card insertion
 ```
 
 ### 3. Detailed Event Logging
@@ -68,36 +63,36 @@ All operations are now logged with comprehensive details:
 
 #### Card Insertion Event
 ```
-2025-11-05 14:30:10 - CFE_AutoMount - INFO - >>> CARD INSERTION DETECTED (Insert button pressed) <<<
-2025-11-05 14:30:10 - CFE_AutoMount - INFO - ============================================================
-2025-11-05 14:30:10 - CFE_AutoMount - INFO - MOUNT REQUEST - Starting mount procedure
-2025-11-05 14:30:10 - CFE_AutoMount - INFO - ============================================================
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - PCIe driver already loaded, performing bus rescan...
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - PCIe bus rescan completed
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - Scanning for NVMe device...
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - NVMe device detected: 0000:01:00.0
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - Found partition: /dev/nvme0n1p1
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - Device label: 'CFE_CARD_001'
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - Filesystem type: exfat
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - Attempting to mount /dev/nvme0n1p1 at /media/RAW...
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - Successfully mounted /dev/nvme0n1p1 at /media/RAW
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - Disk space - Total: 476.94 GB, Used: 152.38 GB (32.0%), Free: 324.56 GB
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - LED indicator enabled
-2025-11-05 14:30:11 - CFE_AutoMount - INFO - Mount procedure completed successfully
+2025-11-05 14:30:10 - INFO - >>> CARD INSERTION DETECTED (Insert button pressed) <<<
+2025-11-05 14:30:10 - INFO - ============================================================
+2025-11-05 14:30:10 - INFO - MOUNT REQUEST - Starting mount procedure
+2025-11-05 14:30:10 - INFO - ============================================================
+2025-11-05 14:30:11 - INFO - PCIe driver already loaded, performing bus rescan...
+2025-11-05 14:30:11 - INFO - PCIe bus rescan completed
+2025-11-05 14:30:11 - INFO - Scanning for NVMe device...
+2025-11-05 14:30:11 - INFO - NVMe device detected: 0000:01:00.0
+2025-11-05 14:30:11 - INFO - Found partition: /dev/nvme0n1p1
+2025-11-05 14:30:11 - INFO - Device label: 'CFE_CARD_001'
+2025-11-05 14:30:11 - INFO - Filesystem type: exfat
+2025-11-05 14:30:11 - INFO - Attempting to mount /dev/nvme0n1p1 at /media/RAW...
+2025-11-05 14:30:11 - INFO - Successfully mounted /dev/nvme0n1p1 at /media/RAW
+2025-11-05 14:30:11 - INFO - Disk space - Total: 476.94 GB, Used: 152.38 GB (32.0%), Free: 324.56 GB
+2025-11-05 14:30:11 - INFO - LED indicator enabled
+2025-11-05 14:30:11 - INFO - Mount procedure completed successfully
 ```
 
 #### Eject Button Press Event
 ```
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - >>> EJECT BUTTON PRESSED <<<
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - ============================================================
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - UNMOUNT REQUEST - Starting unmount procedure
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - ============================================================
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - Unmounting filesystem at /media/RAW...
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - Successfully unmounted /media/RAW
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - Removing PCIe device at 0000:01:00.0...
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - Successfully removed PCIe device 0000:01:00.0
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - LED indicator disabled
-2025-11-05 14:35:22 - CFE_AutoMount - INFO - Unmount procedure completed
+2025-11-05 14:35:22 - INFO - >>> EJECT BUTTON PRESSED <<<
+2025-11-05 14:35:22 - INFO - ============================================================
+2025-11-05 14:35:22 - INFO - UNMOUNT REQUEST - Starting unmount procedure
+2025-11-05 14:35:22 - INFO - ============================================================
+2025-11-05 14:35:22 - INFO - Unmounting filesystem at /media/RAW...
+2025-11-05 14:35:22 - INFO - Successfully unmounted /media/RAW
+2025-11-05 14:35:22 - INFO - Removing PCIe device at 0000:01:00.0...
+2025-11-05 14:35:22 - INFO - Successfully removed PCIe device 0000:01:00.0
+2025-11-05 14:35:22 - INFO - LED indicator disabled
+2025-11-05 14:35:22 - INFO - Unmount procedure completed
 ```
 
 ### 4. Disk Space Information
@@ -129,22 +124,22 @@ The script now attempts to read and log:
 
 The script now logs its initialization:
 ```
-2025-11-05 14:28:00 - CFE_AutoMount - INFO - ================================================================================
-2025-11-05 14:28:00 - CFE_AutoMount - INFO - CFE Hat Auto Mount Service Starting
-2025-11-05 14:28:00 - CFE_AutoMount - INFO - ================================================================================
-2025-11-05 14:28:00 - CFE_AutoMount - INFO - Performing initial button state check...
-2025-11-05 14:28:00 - CFE_AutoMount - INFO - Entering main event loop...
-2025-11-05 14:28:00 - CFE_AutoMount - INFO - Monitoring for card insertion, ejection, and yank events
+2025-11-05 14:28:00 - INFO - ================================================================================
+2025-11-05 14:28:00 - INFO - CFE Hat Auto Mount Service Starting
+2025-11-05 14:28:00 - INFO - ================================================================================
+2025-11-05 14:28:00 - INFO - Performing initial button state check...
+2025-11-05 14:28:00 - INFO - Entering main event loop...
+2025-11-05 14:28:00 - INFO - Monitoring for card insertion, ejection, and yank events
 ```
 
 ### 8. Graceful Shutdown
 
 When stopped with Ctrl+C, the script cleanly unmounts any mounted devices:
 ```
-2025-11-05 14:40:00 - CFE_AutoMount - INFO - Received shutdown signal (Ctrl+C)
-2025-11-05 14:40:00 - CFE_AutoMount - INFO - Cleaning up before exit...
-2025-11-05 14:40:00 - CFE_AutoMount - INFO - Unmounting device before shutdown...
-2025-11-05 14:40:00 - CFE_AutoMount - INFO - CFE Hat Auto Mount Service stopped
+2025-11-05 14:40:00 - INFO - Received shutdown signal (Ctrl+C)
+2025-11-05 14:40:00 - INFO - Cleaning up before exit...
+2025-11-05 14:40:00 - INFO - Unmounting device before shutdown...
+2025-11-05 14:40:00 - INFO - CFE Hat Auto Mount Service stopped
 ```
 
 ## Technical Details
@@ -180,14 +175,6 @@ This will show all button reads and internal state changes.
 
 ## Troubleshooting
 
-### Permission Issues
-
-If log files can't be created, run:
-```bash
-sudo mkdir -p /var/log/cfe-hat
-sudo chmod 755 /var/log/cfe-hat
-```
-
 ### Missing Dependencies
 
 Ensure all required Python packages are installed:
@@ -212,9 +199,9 @@ Should show device at address `0x34`.
 
 ### Card Not Detected
 
-Check the logs for PCIe initialization errors:
+Check the console output for PCIe initialization errors, or if running as a service:
 ```bash
-grep "ERROR" /var/log/cfe-hat/automount.log
+sudo journalctl -u cfe-automount | grep "ERROR"
 ```
 
 Verify the PCIe interface is working:
@@ -227,7 +214,7 @@ lspci -v
 | Feature | Old Script | Enhanced Script |
 |---------|-----------|-----------------|
 | Logging | Basic print statements | Structured logging with timestamps |
-| Log Persistence | Console only | Rotating log files + console |
+| Log Output | Print to console | Python logging module (console) |
 | Yank Detection | None | Automatic detection and recovery |
 | Disk Space Info | Not reported | Full capacity reporting |
 | Device Labels | Not shown | Labels displayed when available |
@@ -238,8 +225,8 @@ lspci -v
 ## Recommendations for Production Use
 
 1. **Start on Boot**: Add to systemd service for automatic startup
-2. **Log Monitoring**: Set up log rotation and monitoring alerts
-3. **Backup Logs**: Periodically archive logs for long-term troubleshooting
+2. **Log Management**: When running as systemd service, logs go to journald automatically
+3. **Redirect Logs**: If running standalone, redirect output to file or use `tee` for dual output
 4. **Filesystem Choice**: Use ExFAT for maximum compatibility
 5. **Label Your Cards**: Set filesystem labels for easy identification
 
