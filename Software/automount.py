@@ -246,13 +246,12 @@ def unmountPCIe(is_yank=False):
     # Try to unmount the filesystem
     try:
         if is_yank:
-            # Force+Lazy unmount for yanked cards - bypasses all I/O waits
-            logger.info(f"Force unmounting yanked card at {mount_path}...")
-            # -f = force (even if busy), -l = lazy (detach immediately)
-            result = os.system(f"sudo umount -fl {mount_path} 2>/dev/null")
-            logger.info(f"Unmount command completed (return code: {result})")
+            # Skip umount for yanked cards - it waits for I/O timeouts (30s)
+            # Instead, just remove the PCIe device and let kernel clean up
+            logger.info(f"Skipping umount for yanked card (device already gone)")
+            logger.info(f"Will remove PCIe device directly - kernel will clean up mount")
         else:
-            # Normal unmount
+            # Normal unmount for proper eject
             logger.info(f"Unmounting filesystem at {mount_path}...")
             result = os.system(f"sudo umount {mount_path}")
 
