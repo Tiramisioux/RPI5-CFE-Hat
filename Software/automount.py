@@ -153,12 +153,22 @@ def mount_last_partition(device_node):
     global mounted_device_path
 
     try:
-        # List all partitions for the given device
-        partitions = sorted([x for x in os.listdir(f"/dev/") if x.startswith(f"nvme{device_node[-1]}n1p")])
+        # Wait for partitions to appear (kernel needs time after PCIe rescan)
+        # Retry up to 5 times with 0.5s delay
+        partitions = []
+        for attempt in range(5):
+            partitions = sorted([x for x in os.listdir(f"/dev/") if x.startswith(f"nvme{device_node[-1]}n1p")])
+            if partitions:
+                logger.debug(f"Found partitions on attempt {attempt + 1}")
+                break
+            if attempt < 4:
+                logger.debug(f"No partitions found yet, waiting... (attempt {attempt + 1}/5)")
+                time.sleep(0.5)
+
         last_partition = partitions[-1] if partitions else None
 
         if not last_partition:
-            logger.warning(f"No partitions found for device {device_node}")
+            logger.warning(f"No partitions found for device {device_node} after 5 attempts")
             return False
 
         device_path = f"/dev/{last_partition}"
