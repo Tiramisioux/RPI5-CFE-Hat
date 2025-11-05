@@ -355,25 +355,60 @@ def check_for_yank():
     if mounted == 0 or device_node is None:
         return False  # Not mounted, so can't be yanked
 
-    # PRIMARY CHECK: Try to actually READ from the device
-    # Device nodes and mount points can persist in cache, but actual I/O will fail
-    logger.debug(f"Yank check: Attempting direct I/O read from {mounted_device_path}")
+    # PRIMARY CHECK: Try multiple methods to detect if device is truly accessible
+    # The kernel on RPi5 caches aggressively, so we need to be thorough
+    logger.debug(f"Yank check: Testing device accessibility for {mounted_device_path}")
 
     if mounted_device_path:
+        # Method 1: Check if device appears in /proc/partitions (real-time kernel view)
         try:
-            # Try to open and read a tiny amount from the device
-            # This will fail immediately if the device is truly gone
-            with open(mounted_device_path, 'rb') as f:
-                # Read just 1 byte - this forces actual hardware I/O
-                f.read(1)
-            logger.debug(f"Device I/O successful - card still present")
+            with open('/proc/partitions', 'r') as f:
+                partitions_content = f.read()
+                device_name = os.path.basename(mounted_device_path)  # e.g., "nvme0n1p1"
+                if device_name not in partitions_content:
+                    logger.critical("!" * 60)
+                    logger.critical("CARD YANKED - CFE card removed without unmount!")
+                    logger.critical(f"Device {mounted_device_path} not found in /proc/partitions")
+                    logger.critical("!" * 60)
+
+                    # Cleanup
+                    try:
+                        logger.warning(f"Attempting to clean up stale mount point {mount_path}...")
+                        result = os.system(f"sudo umount -f {mount_path} 2>/dev/null")
+                        if result == 0:
+                            logger.info("Force unmount successful")
+                        else:
+                            logger.warning("Force unmount may have failed, but continuing cleanup")
+                    except Exception as e:
+                        logger.error(f"Error during force unmount: {e}")
+
+                    writeLED(False)
+                    logger.info("LED indicator disabled")
+                    mounted = 0
+                    device_node = None
+                    mounted_device_path = None
+
+                    logger.warning("System ready for new card insertion")
+                    logger.critical("!" * 60)
+                    return True
+                else:
+                    logger.debug(f"Device {device_name} found in /proc/partitions")
+        except Exception as e:
+            logger.error(f"Error checking /proc/partitions: {e}")
+
+        # Method 2: Try to open device with O_DIRECT to bypass all caching
+        try:
+            # O_DIRECT = 0x4000 on Linux - bypasses kernel page cache
+            fd = os.open(mounted_device_path, os.O_RDONLY | os.O_DIRECT)
+            os.close(fd)
+            logger.debug(f"Direct device access successful - card still present")
         except (IOError, OSError) as e:
             logger.critical("!" * 60)
             logger.critical("CARD YANKED - CFE card removed without unmount!")
-            logger.critical(f"I/O error on device {mounted_device_path}: {e}")
+            logger.critical(f"Direct I/O failed on device {mounted_device_path}: {e}")
             logger.critical("!" * 60)
 
-            # Try to force unmount the stale mount point
+            # Cleanup
             try:
                 logger.warning(f"Attempting to clean up stale mount point {mount_path}...")
                 result = os.system(f"sudo umount -f {mount_path} 2>/dev/null")
@@ -384,7 +419,6 @@ def check_for_yank():
             except Exception as e:
                 logger.error(f"Error during force unmount: {e}")
 
-            # Clear the mounted state
             writeLED(False)
             logger.info("LED indicator disabled")
             mounted = 0
@@ -393,7 +427,6 @@ def check_for_yank():
 
             logger.warning("System ready for new card insertion")
             logger.critical("!" * 60)
-
             return True
 
     # SECONDARY CHECK: Is the mount point accessible with actual I/O?
