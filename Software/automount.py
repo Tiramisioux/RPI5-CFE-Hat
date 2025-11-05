@@ -17,7 +17,7 @@ logger.setLevel(logging.DEBUG)
 
 # Console handler
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
+console_handler.setLevel(logging.DEBUG)  # Temporarily set to DEBUG for troubleshooting
 
 # Formatter with timestamp
 formatter = logging.Formatter(
@@ -352,6 +352,8 @@ def check_for_yank():
     # This is the most reliable check for CFE card yank detection
     pcie_device_path = f"/sys/bus/pci/devices/{device_node}"
 
+    logger.debug(f"Yank check: Looking for PCIe device at {pcie_device_path}")
+
     if not os.path.exists(pcie_device_path):
         logger.critical("!" * 60)
         logger.critical("CARD YANKED - CFE card removed without unmount!")
@@ -448,7 +450,7 @@ def check_for_yank():
 last_insert_button = 0
 last_eject_button = 0
 yank_check_counter = 0
-YANK_CHECK_INTERVAL = 10  # Check for yank every 1 second (10 * 0.1s)
+YANK_CHECK_INTERVAL = 5  # Check for yank every 0.5 seconds (5 * 0.1s)
 
 logger.info("Performing initial button state check...")
 (insert_button, eject_button) = readButtons()
@@ -486,6 +488,7 @@ try:
         yank_check_counter += 1
         if yank_check_counter >= YANK_CHECK_INTERVAL:
             yank_check_counter = 0
+            logger.debug(f"Performing yank check (mounted={mounted}, device_node={device_node})")
             if check_for_yank():
                 logger.warning("Card yank detected and handled")
 
