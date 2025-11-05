@@ -501,8 +501,6 @@ logger.info("Monitoring for card insertion, ejection, and yank events")
 
 try:
     while True:
-        global card_physically_present
-
         # Read current button states
         (insert_button, eject_button) = readButtons()
 
