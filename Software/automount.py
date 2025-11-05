@@ -17,7 +17,7 @@ logger.setLevel(logging.DEBUG)
 
 # Console handler
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)  # Temporarily set to DEBUG for troubleshooting
+console_handler.setLevel(logging.INFO)  # Set to INFO for normal operation (use DEBUG for troubleshooting)
 
 # Formatter with timestamp
 formatter = logging.Formatter(
