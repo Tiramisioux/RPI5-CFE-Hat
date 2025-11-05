@@ -244,18 +244,20 @@ def unmountPCIe(is_yank=False):
     # Try to unmount the filesystem
     try:
         if is_yank:
-            # Lazy unmount for yanked cards - instant, no I/O timeout
-            logger.info(f"Using lazy unmount for yanked card at {mount_path}...")
-            result = os.system(f"sudo umount -l {mount_path}")
+            # Force+Lazy unmount for yanked cards - bypasses all I/O waits
+            logger.info(f"Force unmounting yanked card at {mount_path}...")
+            # -f = force (even if busy), -l = lazy (detach immediately)
+            result = os.system(f"sudo umount -fl {mount_path} 2>/dev/null")
+            logger.info(f"Unmount command completed (return code: {result})")
         else:
             # Normal unmount
             logger.info(f"Unmounting filesystem at {mount_path}...")
             result = os.system(f"sudo umount {mount_path}")
 
-        if result == 0:
-            logger.info(f"Successfully unmounted {mount_path}")
-        else:
-            logger.warning(f"Unmount command returned code {result} (may already be unmounted)")
+            if result == 0:
+                logger.info(f"Successfully unmounted {mount_path}")
+            else:
+                logger.warning(f"Unmount command returned code {result} (may already be unmounted)")
 
     except Exception as e:
         logger.error(f"Error during unmount: {e}")
