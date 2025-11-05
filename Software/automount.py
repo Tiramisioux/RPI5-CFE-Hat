@@ -337,19 +337,25 @@ def check_for_yank():
     """
     Detect if the CFE card was yanked (removed without proper unmount)
     Returns True if card was yanked, False otherwise
+
+    For PCIe-based CFE cards, we check if the PCIe device still exists
+    in the system, which is the most reliable indicator.
     """
     global mounted
     global mounted_device_path
     global device_node
 
-    if mounted == 0 or mounted_device_path is None:
+    if mounted == 0 or device_node is None:
         return False  # Not mounted, so can't be yanked
 
-    # Check if the device still exists
-    if not os.path.exists(mounted_device_path):
+    # PRIMARY CHECK: Is the PCIe device still present?
+    # This is the most reliable check for CFE card yank detection
+    pcie_device_path = f"/sys/bus/pci/devices/{device_node}"
+
+    if not os.path.exists(pcie_device_path):
         logger.critical("!" * 60)
-        logger.critical("CARD YANKED - Device removed without unmount!")
-        logger.critical(f"Device {mounted_device_path} no longer exists")
+        logger.critical("CARD YANKED - CFE card removed without unmount!")
+        logger.critical(f"PCIe device {device_node} no longer exists in system")
         logger.critical("!" * 60)
 
         # Try to force unmount the stale mount point
@@ -375,13 +381,48 @@ def check_for_yank():
 
         return True
 
-    # Additional check: verify mount point is still accessible
+    # SECONDARY CHECK: Can we still list the device with lspci?
+    # This provides an additional verification
     try:
-        os.stat(mount_path)
+        result = subprocess.run(
+            ["lspci", "-s", device_node],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            logger.critical("!" * 60)
+            logger.critical("CARD YANKED - PCIe device not responding!")
+            logger.critical(f"Device {device_node} not found in lspci output")
+            logger.critical("!" * 60)
+
+            # Cleanup
+            try:
+                os.system(f"sudo umount -f {mount_path} 2>/dev/null")
+            except:
+                pass
+
+            writeLED(False)
+            mounted = 0
+            device_node = None
+            mounted_device_path = None
+
+            logger.warning("System ready for new card insertion")
+            logger.critical("!" * 60)
+
+            return True
+    except Exception as e:
+        logger.debug(f"lspci check skipped: {e}")
+
+    # TERTIARY CHECK: Is the mount point accessible?
+    # This catches I/O errors even if device nodes linger
+    try:
+        os.listdir(mount_path)
     except OSError as e:
         logger.critical("!" * 60)
-        logger.critical("MOUNT POINT INACCESSIBLE - Possible card yank or I/O error")
+        logger.critical("MOUNT POINT INACCESSIBLE - I/O error detected!")
         logger.critical(f"Cannot access {mount_path}: {e}")
+        logger.critical("Possible card yank or filesystem corruption")
         logger.critical("!" * 60)
 
         # Clean up
