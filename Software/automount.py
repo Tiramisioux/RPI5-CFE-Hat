@@ -37,7 +37,9 @@ i2c_ch = 1
 i2c_address = 0x34
 bus = smbus.SMBus(i2c_ch)
 
-mounted = 0
+# State tracking
+mounted = 0  # Software mount state: 0=not mounted, 1=mounted
+card_physically_present = False  # Hardware state: True=card in slot, False=card out
 lastReadCount = 0
 lastWriteCount = 0
 
@@ -482,8 +484,12 @@ last_eject_button = 0
 logger.info("Performing initial button state check...")
 (insert_button, eject_button) = readButtons()
 
+# Update card presence state (insert_button==False means card is IN)
+card_physically_present = not insert_button
+logger.info(f"Initial card state: {'PRESENT' if card_physically_present else 'NOT PRESENT'}")
+
 # Auto-mount if card is already inserted at startup
-if insert_button == 0 and mounted == 0:
+if card_physically_present and mounted == 0:
     logger.info("Card detected at startup, performing initial mount...")
     mountPCIe()
 
@@ -495,12 +501,20 @@ logger.info("Monitoring for card insertion, ejection, and yank events")
 
 try:
     while True:
+        global card_physically_present
+
         # Read current button states
         (insert_button, eject_button) = readButtons()
+
+        # Update card physically present state
+        # insert_button==False (raw=0x02) means card is IN slot
+        # insert_button==True (raw=0x03) means card is OUT of slot
+        card_physically_present = not insert_button
 
         # Detect card insertion (falling edge on insert button)
         if last_insert_button == 1 and insert_button == 0 and mounted == 0:
             logger.info(">>> CARD INSERTION DETECTED (Insert button pressed) <<<")
+            logger.debug(f"State: card_physically_present={card_physically_present}, mounted={mounted}")
             mountPCIe()
 
         # Detect eject button press (falling edge on eject button)
@@ -508,13 +522,13 @@ try:
             logger.info(">>> EJECT BUTTON PRESSED <<<")
             unmountPCIe()
 
-        # Detect card yank - card is mounted but insert button says card is gone!
-        if mounted == 1 and insert_button == 1:
+        # Detect card yank - card is mounted but mechanical switch says card is gone!
+        if mounted == 1 and not card_physically_present:
             logger.critical("!" * 60)
             logger.critical("CARD YANKED - CFE card physically removed!")
-            logger.critical("Card was mounted but mechanical insert switch shows card is gone")
+            logger.critical(f"State: mounted={mounted}, card_physically_present={card_physically_present}")
             logger.critical("!" * 60)
-            unmountPCIe(is_yank=True)  # Use lazy unmount for instant cleanup
+            unmountPCIe(is_yank=True)  # Use force+lazy unmount for instant cleanup
 
         # Update button state
         (last_insert_button, last_eject_button) = (insert_button, eject_button)
