@@ -254,14 +254,13 @@ def unmountPCIe(is_yank=False):
         logger.warning("Unmount requested but device was not marked as mounted")
 
     # Try to unmount the filesystem
-    try:
-        if is_yank:
-            # Skip umount for yanked cards - it waits for I/O timeouts (30s)
-            # Instead, just remove the PCIe device and let kernel clean up
-            logger.info(f"Skipping umount for yanked card (device already gone)")
-            logger.info(f"Will remove PCIe device directly - kernel will clean up mount")
-        else:
-            # Normal unmount for proper eject
+    if is_yank:
+        # For yanked cards: Skip umount initially (would timeout for 30s)
+        # We'll clean up AFTER removing the PCIe device
+        logger.info(f"Card was yanked - will clean up mount point after PCIe removal")
+    else:
+        # Normal unmount for proper eject
+        try:
             logger.info(f"Unmounting filesystem at {mount_path}...")
             result = os.system(f"sudo umount {mount_path}")
 
@@ -270,8 +269,8 @@ def unmountPCIe(is_yank=False):
             else:
                 logger.warning(f"Unmount command returned code {result} (may already be unmounted)")
 
-    except Exception as e:
-        logger.error(f"Error during unmount: {e}")
+        except Exception as e:
+            logger.error(f"Error during unmount: {e}")
 
     # Find and remove the PCIe device
     NVMe_port = check_for_device("Non-Volatile memory controller")
@@ -288,6 +287,16 @@ def unmountPCIe(is_yank=False):
             logger.error(f"Error removing PCIe device: {e}")
     else:
         logger.warning("No NVMe device found to remove (may have already been removed)")
+
+    # Clean up stale mount point after PCIe removal (for yanked cards)
+    if is_yank:
+        try:
+            logger.info(f"Cleaning up stale mount point at {mount_path}...")
+            # Now that PCIe device is gone, lazy unmount should be instant
+            result = os.system(f"sudo umount -l {mount_path} 2>/dev/null")
+            logger.info(f"Mount point cleanup completed")
+        except Exception as e:
+            logger.error(f"Error cleaning up mount point: {e}")
 
     # Turn off LED
     writeLED(False)
