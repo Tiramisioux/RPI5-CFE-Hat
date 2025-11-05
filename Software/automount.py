@@ -355,45 +355,55 @@ def check_for_yank():
     if mounted == 0 or device_node is None:
         return False  # Not mounted, so can't be yanked
 
-    # PRIMARY CHECK: Does the NVMe device node still exist?
-    # On RPi5, /dev/nvme* disappears immediately when card is yanked
-    # This is more reliable than PCIe sysfs paths which can linger
-    logger.debug(f"Yank check: Looking for NVMe device at {mounted_device_path}")
+    # PRIMARY CHECK: Try to actually READ from the device
+    # Device nodes and mount points can persist in cache, but actual I/O will fail
+    logger.debug(f"Yank check: Attempting direct I/O read from {mounted_device_path}")
 
-    if mounted_device_path and not os.path.exists(mounted_device_path):
-        logger.critical("!" * 60)
-        logger.critical("CARD YANKED - CFE card removed without unmount!")
-        logger.critical(f"NVMe device {mounted_device_path} no longer exists")
-        logger.critical("!" * 60)
-
-        # Try to force unmount the stale mount point
+    if mounted_device_path:
         try:
-            logger.warning(f"Attempting to clean up stale mount point {mount_path}...")
-            result = os.system(f"sudo umount -f {mount_path} 2>/dev/null")
-            if result == 0:
-                logger.info("Force unmount successful")
-            else:
-                logger.warning("Force unmount may have failed, but continuing cleanup")
-        except Exception as e:
-            logger.error(f"Error during force unmount: {e}")
+            # Try to open and read a tiny amount from the device
+            # This will fail immediately if the device is truly gone
+            with open(mounted_device_path, 'rb') as f:
+                # Read just 1 byte - this forces actual hardware I/O
+                f.read(1)
+            logger.debug(f"Device I/O successful - card still present")
+        except (IOError, OSError) as e:
+            logger.critical("!" * 60)
+            logger.critical("CARD YANKED - CFE card removed without unmount!")
+            logger.critical(f"I/O error on device {mounted_device_path}: {e}")
+            logger.critical("!" * 60)
 
-        # Clear the mounted state
-        writeLED(False)
-        logger.info("LED indicator disabled")
-        mounted = 0
-        device_node = None
-        mounted_device_path = None
+            # Try to force unmount the stale mount point
+            try:
+                logger.warning(f"Attempting to clean up stale mount point {mount_path}...")
+                result = os.system(f"sudo umount -f {mount_path} 2>/dev/null")
+                if result == 0:
+                    logger.info("Force unmount successful")
+                else:
+                    logger.warning("Force unmount may have failed, but continuing cleanup")
+            except Exception as e:
+                logger.error(f"Error during force unmount: {e}")
 
-        logger.warning("System ready for new card insertion")
-        logger.critical("!" * 60)
+            # Clear the mounted state
+            writeLED(False)
+            logger.info("LED indicator disabled")
+            mounted = 0
+            device_node = None
+            mounted_device_path = None
 
-        return True
+            logger.warning("System ready for new card insertion")
+            logger.critical("!" * 60)
 
-    # SECONDARY CHECK: Is the mount point accessible?
-    # This catches I/O errors even if device nodes linger
-    logger.debug(f"Yank check: Testing I/O access to {mount_path}")
+            return True
+
+    # SECONDARY CHECK: Is the mount point accessible with actual I/O?
+    logger.debug(f"Yank check: Testing filesystem I/O at {mount_path}")
     try:
-        os.listdir(mount_path)
+        # Try to actually stat files in the directory, not just list
+        entries = os.listdir(mount_path)
+        if entries:
+            # Try to stat the first entry to force I/O
+            os.stat(os.path.join(mount_path, entries[0]))
     except OSError as e:
         logger.critical("!" * 60)
         logger.critical("MOUNT POINT INACCESSIBLE - I/O error detected!")
