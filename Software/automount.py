@@ -323,6 +323,13 @@ def mountPCIe():
             logger.info("LED indicator enabled")
             mounted = 1
             logger.info("Mount procedure completed successfully")
+
+            # Verify PCIe device path for yank detection
+            pcie_check_path = f"/sys/bus/pci/devices/{device_node}"
+            if os.path.exists(pcie_check_path):
+                logger.debug(f"Verified: PCIe device exists at {pcie_check_path}")
+            else:
+                logger.warning(f"WARNING: PCIe device path not found at {pcie_check_path}")
         else:
             logger.error("Mount procedure failed - could not mount partition")
             mounted = 0
