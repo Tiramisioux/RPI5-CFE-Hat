@@ -1,0 +1,27 @@
+[Unit]
+Description=Storage Auto-Mount Service (Enhanced CFE Hat + USB Storage)
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /opt/storage-automount/storage-automount-enhanced.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Environment variables (optional)
+Environment="STORAGE_AUTOMOUNT_LOG=INFO"
+Environment="REDIS_HOST=localhost"
+Environment="REDIS_PORT=6379"
+
+# Security hardening (optional - adjust as needed)
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
+
+[Install]
+WantedBy=multi-user.target
