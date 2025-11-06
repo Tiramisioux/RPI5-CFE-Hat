@@ -881,7 +881,7 @@ def _cfe_hat_worker():
     Enhanced CFE-HAT worker with instant yank detection and fast recovery.
     Uses mechanical button state for reliable card presence detection.
     """
-    global _active_raw
+    global _active_raw, _mounts, _active_mount_kinds, _mount_labels, _raw_lock
     if smbus is None:
         log.debug("No smbus module, CFE-HAT thread disabled")
         return
