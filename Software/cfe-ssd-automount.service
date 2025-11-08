@@ -1,0 +1,23 @@
+[Unit]
+Description=CFexpress SSD Auto-Mount Service with I2C Control
+After=multi-user.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/user/RPI5-CFE-Hat/Software/cfe_ssd_automount.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+User=root
+
+# Security settings (optional, but recommended)
+# Uncomment these for enhanced security
+#NoNewPrivileges=true
+#PrivateTmp=true
+#ProtectSystem=strict
+#ReadWritePaths=/media
+
+[Install]
+WantedBy=multi-user.target

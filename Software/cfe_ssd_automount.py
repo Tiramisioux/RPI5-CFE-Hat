@@ -19,6 +19,7 @@ lastWriteCount = 0
 
 device_node = None
 mounted_path = None
+card_present = None  # Track mechanical card presence state
 
 def readButtons():
     while 1:
@@ -168,20 +169,47 @@ def mountPCIe():
 last_insert_button = 0
 last_eject_button = 0
 
+print("CFE SSD Auto-Mount Service Started")
+print("Mount base: /media")
+print("Drives will be mounted to /media/DRIVE_LABEL")
+print("Supported filesystems: ext4, NTFS, exFAT")
+print("Monitoring CFexpress card slot...")
+
 (insert_button,eject_button) = readButtons()
-if insert_button == 0 and mounted == 0:
-    mountPCIe()
+
+# Set initial card presence state
+card_present = (insert_button == 0)
+if card_present:
+    print("CFexpress card detected: INSERTED")
+    if mounted == 0:
+        mountPCIe()
+else:
+    print("CFexpress card status: NOT PRESENT")
+
 last_insert_button = insert_button
 last_eject_button = eject_button
 
 try:
     while True:
         (insert_button,eject_button) = readButtons()
-        #print((insert_button,eject_button),(last_insert_button,last_eject_button))
+
+        # Check for mechanical card insertion/removal
+        current_card_present = (insert_button == 0)
+        if current_card_present != card_present:
+            card_present = current_card_present
+            if card_present:
+                print("CFexpress card detected: INSERTED")
+            else:
+                print("CFexpress card status: NOT PRESENT")
+
+        # Handle mount button press (card inserted and button released)
         if last_insert_button == 1 and insert_button == 0 and mounted == 0:
             mountPCIe()
+
+        # Handle eject button press
         if last_eject_button == 1 and eject_button == 0:
             unmountPCIe()
+
         (last_insert_button,last_eject_button) = (insert_button,eject_button)
         time.sleep(0.1)
 
