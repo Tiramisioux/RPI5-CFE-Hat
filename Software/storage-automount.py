@@ -687,15 +687,38 @@ def _initial_scan():
     log.info("Scanning for existing storage devices...")
 
     raws, others = [], []
+
+    # Scan partitions
     for device in _udev_ctx.list_devices(subsystem="block", DEVTYPE="partition"):
         devnode = device.device_node
         if not devnode:
             continue
-        label, _ = _get_filesystem_info(devnode)
-        if label == "RAW":
-            raws.append(devnode)
-        else:
-            others.append(devnode)
+        label, fstype = _get_filesystem_info(devnode)
+        if fstype:  # Has a filesystem
+            if label == "RAW":
+                raws.append(devnode)
+            else:
+                others.append(devnode)
+
+    # Scan whole disks (for drives without partition tables)
+    for device in _udev_ctx.list_devices(subsystem="block", DEVTYPE="disk"):
+        devnode = device.device_node
+        if not devnode:
+            continue
+        # Skip devices we already processed as partitions
+        if any(devnode in d for d in others + raws):
+            continue
+        # Skip SD cards and loop devices
+        if devnode.startswith(("/dev/mmcblk", "/dev/loop")):
+            continue
+
+        label, fstype = _get_filesystem_info(devnode)
+        if fstype:  # Has a filesystem on whole disk
+            log.info("Found whole-disk filesystem on %s (%s)", devnode, fstype)
+            if label == "RAW":
+                raws.append(devnode)
+            else:
+                others.append(devnode)
 
     # Mount non-RAW drives
     for devnode in others:
