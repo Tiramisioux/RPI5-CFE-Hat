@@ -645,7 +645,7 @@ def _cfe_hat_worker():
 
         # INSERT pressed (latch open) - pre-emptive unmount
         if ins_prev == 0 and ins_now == 1:
-            log.info("CFexpress card: INSERTED (latch opened)")
+            log.info("CFexpress card status: REMOVED (latch opened)")
             for dev in list(_mounts):
                 if dev.startswith("/dev/nvme"):
                     subprocess.call(["umount", "-l", str(_mounts[dev])],
@@ -659,7 +659,7 @@ def _cfe_hat_worker():
 
         # INSERT released - power up and mount
         if ins_prev == 1 and ins_now == 0:
-            log.info("CFexpress card: LOCKED (latch closed)")
+            log.info("CFexpress card status: INSERTED (latch closed)")
             _pcie(True)
             _set_led(True)
 
