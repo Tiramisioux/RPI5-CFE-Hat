@@ -522,6 +522,18 @@ def _sanity_watchdog():
                                   stderr=subprocess.DEVNULL)
                     _mounts.pop(dev, None)
                     _active_mount_kinds.pop(dev, None)
+
+                    # Clean up RAW arbitration state
+                    _register_raw_remove(dev)
+                    with _raw_lock:
+                        global _active_raw
+                        if dev == _active_raw:
+                            _active_raw = None
+                            # Try to mount another RAW if available
+                            fallback = _raw_pool[-1] if _raw_pool else None
+                            if fallback:
+                                _switch_to_raw(fallback)
+
                     _restore_sysctls()
 
         # RAW arbitration self-heal
