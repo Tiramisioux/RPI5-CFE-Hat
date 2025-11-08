@@ -5,7 +5,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/user/RPI5-CFE-Hat/Software/cfe_ssd_automount.py
+ExecStart=/usr/bin/python3 /home/user/RPI5-CFE-Hat/Software/cfe-nvme-automount.py
 Restart=always
 RestartSec=5
 StandardOutput=journal
