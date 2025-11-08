@@ -31,6 +31,7 @@ mounted_device = None
 mounted_partition = None
 mounted_path = None
 last_device_check = 0
+failed_devices = {}  # Track devices that failed to mount with timestamp
 
 
 def is_nvme_device(device_name):
@@ -303,16 +304,24 @@ def mount_nvme_device():
     Returns:
         tuple: (device_name, partition_path, mount_path) if successful, (None, None, None) otherwise
     """
-    global mounted_device, mounted_partition, mounted_path
+    global mounted_device, mounted_partition, mounted_path, failed_devices
 
     # Get list of NVMe devices
     devices = get_nvme_devices()
 
     if not devices:
+        # Clean up old failed devices (after 30 seconds)
+        current_time = time.time()
+        failed_devices = {k: v for k, v in failed_devices.items() if current_time - v < 30}
         return (None, None, None)
 
     # Use the first detected device
     device_name = devices[0]
+
+    # Check if this device recently failed to mount
+    if device_name in failed_devices:
+        # Don't spam - already tried this device recently
+        return (None, None, None)
 
     if len(devices) > 1:
         print(f"Multiple NVMe devices detected: {devices}. Using {device_name}")
@@ -327,7 +336,51 @@ def mount_nvme_device():
 
     if not partitions:
         print(f"No partitions found on {device_name}")
-        return (None, None, None)
+        print(f"Checking if {device_name} is a whole disk...")
+
+        # Try to mount the whole disk (no partition)
+        device_path = f"/dev/{device_name}"
+        fs_type = get_filesystem_type(device_path)
+
+        if fs_type:
+            print(f"Detected filesystem on whole disk: {fs_type}")
+            label = get_filesystem_label(device_path)
+
+            # Determine mount path based on label
+            if label:
+                mount_path = os.path.join(MOUNT_BASE, label)
+                print(f"Detected filesystem label: {label}")
+            else:
+                mount_path = os.path.join(MOUNT_BASE, device_name)
+                print(f"No filesystem label detected, using device name: {device_name}")
+
+            # Check if already mounted
+            is_mounted, current_mount = is_device_mounted(device_path)
+            if is_mounted:
+                if current_mount == mount_path:
+                    print(f"{device_path} already mounted at {mount_path}")
+                    mounted_device = device_name
+                    mounted_partition = device_path
+                    mounted_path = mount_path
+                    return (device_name, device_path, mount_path)
+                else:
+                    print(f"{device_path} already mounted at {current_mount} (expected {mount_path})")
+                    failed_devices[device_name] = time.time()
+                    return (None, None, None)
+
+            # Mount the whole disk
+            if mount_partition(device_path, fs_type, mount_path):
+                mounted_device = device_name
+                mounted_partition = device_path
+                mounted_path = mount_path
+                return (device_name, device_path, mount_path)
+            else:
+                failed_devices[device_name] = time.time()
+                return (None, None, None)
+        else:
+            print(f"No filesystem found on {device_name}. Device may be unformatted or corrupted.")
+            failed_devices[device_name] = time.time()
+            return (None, None, None)
 
     # Use the last partition (similar to CFE script behavior)
     partition_name = partitions[-1]
@@ -340,6 +393,7 @@ def mount_nvme_device():
 
     if not fs_type:
         print(f"Could not determine filesystem type for {partition_path}")
+        failed_devices[device_name] = time.time()
         return (None, None, None)
 
     print(f"Detected filesystem: {fs_type}")
@@ -367,6 +421,7 @@ def mount_nvme_device():
             return (device_name, partition_path, mount_path)
         else:
             print(f"{partition_path} already mounted at {current_mount} (expected {mount_path})")
+            failed_devices[device_name] = time.time()
             return (None, None, None)
 
     # Mount the partition
@@ -376,6 +431,7 @@ def mount_nvme_device():
         mounted_path = mount_path
         return (device_name, partition_path, mount_path)
     else:
+        failed_devices[device_name] = time.time()
         return (None, None, None)
 
 
