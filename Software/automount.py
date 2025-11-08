@@ -18,6 +18,7 @@ lastReadCount = 0
 lastWriteCount = 0
 
 device_node = None
+mounted_path = None
 
 def readButtons():
     while 1:
@@ -66,6 +67,14 @@ def get_filesystem_type(device_path):
     except:
         return None
 
+def get_filesystem_label(device_path):
+    try:
+        # Using blkid to determine the filesystem label
+        result = subprocess.check_output(["sudo", "blkid", "-s", "LABEL", "-o", "value", device_path], text=True).strip()
+        return result if result else None
+    except:
+        return None
+
 def mount_last_partition(device_node):
     # List all partitions for the given device and get the last partition number
     partitions = sorted([x for x in os.listdir(f"/dev/") if x.startswith(f"nvme{device_node[-1]}n1p")])
@@ -73,21 +82,32 @@ def mount_last_partition(device_node):
 
     if not last_partition:
         print(f"No partitions found for device {device_node}.")
-        return
+        return None
 
     device_path = f"/dev/{last_partition}"
-    mount_path = "/media/RAW"
 
     fs_type = get_filesystem_type(device_path)
 
     if not fs_type:
         print(f"Could not determine the filesystem type of {device_path}.")
-        return
+        return None
+
+    # Get filesystem label
+    label = get_filesystem_label(device_path)
+
+    # Determine mount path based on label
+    if label:
+        mount_path = f"/media/{label}"
+        print(f"Detected filesystem label: {label}")
+    else:
+        # No label, use device name as fallback
+        mount_path = f"/media/{last_partition}"
+        print(f"No filesystem label detected, using device name: {last_partition}")
 
     os.system(f"sudo mkdir -p {mount_path}")  # Create mount point with sudo
 
     print(f"NVMe device {device_node} found, attempting to mount partition {device_path}...")
-    
+
     if fs_type == "ntfs":
         os.system(f"sudo mount -t ntfs3 -o uid=1000,gid=1000 {device_path} {mount_path}")
     elif fs_type == "ext4":
@@ -96,17 +116,20 @@ def mount_last_partition(device_node):
         os.system(f"sudo mount -t exfat -o uid=1000,gid=1000 {device_path} {mount_path}")
     else:
         print(f"Unsupported filesystem type {fs_type}.")
-        return
+        return None
 
     print(f"NVMe device {device_node} partition {device_path} has been mounted at {mount_path}")
+    return mount_path
 
 
 def unmountPCIe():
     global mounted
     global device_node
+    global mounted_path
     print("Unmounting PCIe device")
     try:
-        os.system("sudo bash -c 'umount /media/RAW'")
+        if mounted_path:
+            os.system(f"sudo bash -c 'umount {mounted_path}'")
     except:
         pass
     NVMe_port = check_for_device("Non-Volatile memory controller")
@@ -116,10 +139,12 @@ def unmountPCIe():
     writeLED(False)
     mounted = 0
     device_node = None
+    mounted_path = None
 
 def mountPCIe():
     global mounted
     global device_node
+    global mounted_path
     print("Mounting PCIe device")
     time.sleep(0.5)
     if os.path.exists('/sys/devices/platform/axi/1000110000.pcie/driver'):
@@ -128,16 +153,17 @@ def mountPCIe():
     else:
         print("1000110000.pcie driver has not loaded, binding the driver")
         os.system("sudo bash -c 'echo 1000110000.pcie > /sys/bus/platform/drivers/brcm-pcie/bind'")
-    
+
     time.sleep(0.5)
     # Check if the device is mounted
     device_node = check_for_device("Non-Volatile memory controller")
 
     # Mount the NVMe drive if it's found
     if device_node:
-        mount_last_partition(device_node)
-        writeLED(True)
-        mounted = 1
+        mounted_path = mount_last_partition(device_node)
+        if mounted_path:
+            writeLED(True)
+            mounted = 1
 
 last_insert_button = 0
 last_eject_button = 0

@@ -17,7 +17,7 @@ User=root
 #NoNewPrivileges=true
 #PrivateTmp=true
 #ProtectSystem=strict
-#ReadWritePaths=/media/USB_SSD /var/log
+#ReadWritePaths=/media
 
 [Install]
 WantedBy=multi-user.target

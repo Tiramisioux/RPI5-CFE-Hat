@@ -22,13 +22,14 @@ import re
 from pathlib import Path
 
 # Configuration
-MOUNT_PATH = "/media/USB_SSD"
+MOUNT_BASE = "/media"
 POLL_INTERVAL = 0.5  # seconds
 DEVICE_SETTLE_TIME = 1.0  # seconds to wait after device detection
 
 # State variables
 mounted_device = None
 mounted_partition = None
+mounted_path = None
 last_device_check = 0
 
 
@@ -132,6 +133,30 @@ def get_filesystem_type(device_path):
         return None
 
 
+def get_filesystem_label(device_path):
+    """
+    Get the filesystem label of a device/partition.
+
+    Args:
+        device_path: Full path to device (e.g., '/dev/sda1')
+
+    Returns:
+        str: Filesystem label or None if no label is set
+    """
+    try:
+        result = subprocess.check_output(
+            ["sudo", "blkid", "-s", "LABEL", "-o", "value", device_path],
+            text=True,
+            stderr=subprocess.DEVNULL
+        ).strip()
+        return result if result else None
+    except subprocess.CalledProcessError:
+        return None
+    except Exception as e:
+        print(f"Error determining filesystem label for {device_path}: {e}")
+        return None
+
+
 def is_device_mounted(device_path):
     """
     Check if a device is currently mounted.
@@ -173,46 +198,47 @@ def device_exists(device_path):
         return False
 
 
-def mount_partition(device_path, fs_type):
+def mount_partition(device_path, fs_type, mount_path):
     """
     Mount a partition with appropriate options based on filesystem type.
 
     Args:
         device_path: Full path to partition (e.g., '/dev/sda1')
         fs_type: Filesystem type ('ext4', 'ntfs', 'exfat')
+        mount_path: Path where to mount the partition
 
     Returns:
         bool: True if mount successful, False otherwise
     """
     try:
         # Create mount point if it doesn't exist
-        os.makedirs(MOUNT_PATH, exist_ok=True)
+        os.makedirs(mount_path, exist_ok=True)
 
-        print(f"Mounting {device_path} ({fs_type}) at {MOUNT_PATH}...")
+        print(f"Mounting {device_path} ({fs_type}) at {mount_path}...")
 
         # Mount with appropriate options based on filesystem
         if fs_type == "ntfs":
             # Use ntfs3 driver (kernel 5.15+) with proper permissions
-            cmd = f"sudo mount -t ntfs3 -o uid=1000,gid=1000,dmask=022,fmask=133 {device_path} {MOUNT_PATH}"
+            cmd = f"sudo mount -t ntfs3 -o uid=1000,gid=1000,dmask=022,fmask=133 {device_path} {mount_path}"
         elif fs_type == "ext4":
             # Mount ext4 with defaults
-            cmd = f"sudo mount -t ext4 {device_path} {MOUNT_PATH}"
+            cmd = f"sudo mount -t ext4 {device_path} {mount_path}"
         elif fs_type == "exfat":
             # Mount exFAT with proper permissions
-            cmd = f"sudo mount -t exfat -o uid=1000,gid=1000,dmask=022,fmask=133 {device_path} {MOUNT_PATH}"
+            cmd = f"sudo mount -t exfat -o uid=1000,gid=1000,dmask=022,fmask=133 {device_path} {mount_path}"
         elif fs_type == "ext3" or fs_type == "ext2":
             # Support older ext filesystems
-            cmd = f"sudo mount -t {fs_type} {device_path} {MOUNT_PATH}"
+            cmd = f"sudo mount -t {fs_type} {device_path} {mount_path}"
         elif fs_type == "vfat" or fs_type == "msdos":
             # Support FAT filesystems
-            cmd = f"sudo mount -t vfat -o uid=1000,gid=1000,dmask=022,fmask=133 {device_path} {MOUNT_PATH}"
+            cmd = f"sudo mount -t vfat -o uid=1000,gid=1000,dmask=022,fmask=133 {device_path} {mount_path}"
         else:
             print(f"Unsupported filesystem type: {fs_type}")
             return False
 
         result = os.system(cmd)
         if result == 0:
-            print(f"Successfully mounted {device_path} at {MOUNT_PATH}")
+            print(f"Successfully mounted {device_path} at {mount_path}")
             return True
         else:
             print(f"Failed to mount {device_path} (exit code: {result})")
@@ -223,7 +249,7 @@ def mount_partition(device_path, fs_type):
         return False
 
 
-def unmount_partition(mount_path=MOUNT_PATH, force=False):
+def unmount_partition(mount_path, force=False):
     """
     Unmount a partition.
 
@@ -266,15 +292,15 @@ def mount_usb_device():
     Detect and mount a USB storage device.
 
     Returns:
-        tuple: (device_name, partition_path) if successful, (None, None) otherwise
+        tuple: (device_name, partition_path, mount_path) if successful, (None, None, None) otherwise
     """
-    global mounted_device, mounted_partition
+    global mounted_device, mounted_partition, mounted_path
 
     # Get list of USB storage devices
     devices = get_usb_storage_devices()
 
     if not devices:
-        return (None, None)
+        return (None, None, None)
 
     # Use the first detected device
     device_name = devices[0]
@@ -292,7 +318,7 @@ def mount_usb_device():
 
     if not partitions:
         print(f"No partitions found on {device_name}")
-        return (None, None)
+        return (None, None, None)
 
     # Use the last partition (similar to CFE script behavior)
     partition_name = partitions[-1]
@@ -300,32 +326,48 @@ def mount_usb_device():
 
     print(f"Found {len(partitions)} partition(s), using: {partition_name}")
 
-    # Check if already mounted
-    is_mounted, current_mount = is_device_mounted(partition_path)
-    if is_mounted:
-        if current_mount == MOUNT_PATH:
-            print(f"{partition_path} already mounted at {MOUNT_PATH}")
-            return (device_name, partition_path)
-        else:
-            print(f"{partition_path} already mounted at {current_mount}")
-            return (None, None)
-
     # Detect filesystem type
     fs_type = get_filesystem_type(partition_path)
 
     if not fs_type:
         print(f"Could not determine filesystem type for {partition_path}")
-        return (None, None)
+        return (None, None, None)
 
     print(f"Detected filesystem: {fs_type}")
 
+    # Get filesystem label
+    label = get_filesystem_label(partition_path)
+
+    # Determine mount path based on label
+    if label:
+        mount_path = os.path.join(MOUNT_BASE, label)
+        print(f"Detected filesystem label: {label}")
+    else:
+        # No label, use device name as fallback
+        mount_path = os.path.join(MOUNT_BASE, partition_name)
+        print(f"No filesystem label detected, using device name: {partition_name}")
+
+    # Check if already mounted
+    is_mounted, current_mount = is_device_mounted(partition_path)
+    if is_mounted:
+        if current_mount == mount_path:
+            print(f"{partition_path} already mounted at {mount_path}")
+            mounted_device = device_name
+            mounted_partition = partition_path
+            mounted_path = mount_path
+            return (device_name, partition_path, mount_path)
+        else:
+            print(f"{partition_path} already mounted at {current_mount} (expected {mount_path})")
+            return (None, None, None)
+
     # Mount the partition
-    if mount_partition(partition_path, fs_type):
+    if mount_partition(partition_path, fs_type, mount_path):
         mounted_device = device_name
         mounted_partition = partition_path
-        return (device_name, partition_path)
+        mounted_path = mount_path
+        return (device_name, partition_path, mount_path)
     else:
-        return (None, None)
+        return (None, None, None)
 
 
 def check_device_health():
@@ -364,17 +406,18 @@ def handle_device_removal():
     """
     Handle cleanup when a device is removed (accidentally or intentionally).
     """
-    global mounted_device, mounted_partition
+    global mounted_device, mounted_partition, mounted_path
 
     print("Handling device removal...")
 
     # Attempt to unmount (force if necessary, since device might be gone)
-    if os.path.ismount(MOUNT_PATH):
-        unmount_partition(MOUNT_PATH, force=True)
+    if mounted_path and os.path.ismount(mounted_path):
+        unmount_partition(mounted_path, force=True)
 
     # Reset state
     mounted_device = None
     mounted_partition = None
+    mounted_path = None
 
     print("Device removal handled, ready for new device")
 
@@ -383,10 +426,11 @@ def main():
     """
     Main loop for USB SSD auto-mount daemon.
     """
-    global mounted_device, mounted_partition
+    global mounted_device, mounted_partition, mounted_path
 
     print("USB SSD Auto-Mount Service Started")
-    print(f"Mount path: {MOUNT_PATH}")
+    print(f"Mount base: {MOUNT_BASE}")
+    print(f"Drives will be mounted to {MOUNT_BASE}/DRIVE_LABEL")
     print(f"Supported filesystems: ext4, ext3, ext2, NTFS, exFAT, FAT")
 
     try:
@@ -398,9 +442,9 @@ def main():
                     handle_device_removal()
             else:
                 # Try to mount a USB device
-                device, partition = mount_usb_device()
+                device, partition, mount_path = mount_usb_device()
                 if device:
-                    print(f"Successfully mounted {partition} from device {device}")
+                    print(f"Successfully mounted {partition} from device {device} at {mount_path}")
 
             # Sleep before next check
             time.sleep(POLL_INTERVAL)
