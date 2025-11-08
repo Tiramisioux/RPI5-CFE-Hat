@@ -18,7 +18,6 @@ import os
 import sys
 import time
 import subprocess
-import logging
 import re
 from pathlib import Path
 
@@ -26,22 +25,11 @@ from pathlib import Path
 MOUNT_PATH = "/media/USB_SSD"
 POLL_INTERVAL = 0.5  # seconds
 DEVICE_SETTLE_TIME = 1.0  # seconds to wait after device detection
-LOG_FILE = "/var/log/usb_ssd_automount.log"
 
 # State variables
 mounted_device = None
 mounted_partition = None
 last_device_check = 0
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler()
-    ]
-)
 
 
 def is_usb_storage_device(device_name):
@@ -71,7 +59,7 @@ def is_usb_storage_device(device_name):
 
         return False
     except Exception as e:
-        logging.error(f"Error checking if {device_name} is USB storage: {e}")
+        print(f"Error checking if {device_name} is USB storage: {e}")
         return False
 
 
@@ -94,7 +82,7 @@ def get_usb_storage_devices():
                 devices.append(device)
 
     except Exception as e:
-        logging.error(f"Error getting USB storage devices: {e}")
+        print(f"Error getting USB storage devices: {e}")
 
     return devices
 
@@ -116,7 +104,7 @@ def get_device_partitions(device_name):
                 partitions.append(entry)
         return sorted(partitions)
     except Exception as e:
-        logging.error(f"Error getting partitions for {device_name}: {e}")
+        print(f"Error getting partitions for {device_name}: {e}")
         return []
 
 
@@ -140,7 +128,7 @@ def get_filesystem_type(device_path):
     except subprocess.CalledProcessError:
         return None
     except Exception as e:
-        logging.error(f"Error determining filesystem type for {device_path}: {e}")
+        print(f"Error determining filesystem type for {device_path}: {e}")
         return None
 
 
@@ -165,7 +153,7 @@ def is_device_mounted(device_path):
                         return (True, parts[1])
         return (False, None)
     except Exception as e:
-        logging.error(f"Error checking if {device_path} is mounted: {e}")
+        print(f"Error checking if {device_path} is mounted: {e}")
         return (False, None)
 
 
@@ -200,7 +188,7 @@ def mount_partition(device_path, fs_type):
         # Create mount point if it doesn't exist
         os.makedirs(MOUNT_PATH, exist_ok=True)
 
-        logging.info(f"Mounting {device_path} ({fs_type}) at {MOUNT_PATH}...")
+        print(f"Mounting {device_path} ({fs_type}) at {MOUNT_PATH}...")
 
         # Mount with appropriate options based on filesystem
         if fs_type == "ntfs":
@@ -219,19 +207,19 @@ def mount_partition(device_path, fs_type):
             # Support FAT filesystems
             cmd = f"sudo mount -t vfat -o uid=1000,gid=1000,dmask=022,fmask=133 {device_path} {MOUNT_PATH}"
         else:
-            logging.warning(f"Unsupported filesystem type: {fs_type}")
+            print(f"Unsupported filesystem type: {fs_type}")
             return False
 
         result = os.system(cmd)
         if result == 0:
-            logging.info(f"Successfully mounted {device_path} at {MOUNT_PATH}")
+            print(f"Successfully mounted {device_path} at {MOUNT_PATH}")
             return True
         else:
-            logging.error(f"Failed to mount {device_path} (exit code: {result})")
+            print(f"Failed to mount {device_path} (exit code: {result})")
             return False
 
     except Exception as e:
-        logging.error(f"Error mounting {device_path}: {e}")
+        print(f"Error mounting {device_path}: {e}")
         return False
 
 
@@ -247,7 +235,7 @@ def unmount_partition(mount_path=MOUNT_PATH, force=False):
         bool: True if unmount successful, False otherwise
     """
     try:
-        logging.info(f"Unmounting {mount_path}...")
+        print(f"Unmounting {mount_path}...")
 
         if force:
             # Lazy unmount - detaches the filesystem immediately
@@ -258,18 +246,18 @@ def unmount_partition(mount_path=MOUNT_PATH, force=False):
 
         result = os.system(cmd)
         if result == 0:
-            logging.info(f"Successfully unmounted {mount_path}")
+            print(f"Successfully unmounted {mount_path}")
             return True
         else:
-            logging.warning(f"Unmount returned exit code: {result}")
+            print(f"Unmount returned exit code: {result}")
             if not force:
                 # Try force unmount if normal unmount failed
-                logging.info("Attempting force unmount...")
+                print("Attempting force unmount...")
                 return unmount_partition(mount_path, force=True)
             return False
 
     except Exception as e:
-        logging.error(f"Error unmounting {mount_path}: {e}")
+        print(f"Error unmounting {mount_path}: {e}")
         return False
 
 
@@ -292,9 +280,9 @@ def mount_usb_device():
     device_name = devices[0]
 
     if len(devices) > 1:
-        logging.warning(f"Multiple USB storage devices detected: {devices}. Using {device_name}")
+        print(f"Multiple USB storage devices detected: {devices}. Using {device_name}")
 
-    logging.info(f"USB storage device detected: {device_name}")
+    print(f"USB storage device detected: {device_name}")
 
     # Wait for device to settle
     time.sleep(DEVICE_SETTLE_TIME)
@@ -303,33 +291,33 @@ def mount_usb_device():
     partitions = get_device_partitions(device_name)
 
     if not partitions:
-        logging.warning(f"No partitions found on {device_name}")
+        print(f"No partitions found on {device_name}")
         return (None, None)
 
     # Use the last partition (similar to CFE script behavior)
     partition_name = partitions[-1]
     partition_path = f"/dev/{partition_name}"
 
-    logging.info(f"Found {len(partitions)} partition(s), using: {partition_name}")
+    print(f"Found {len(partitions)} partition(s), using: {partition_name}")
 
     # Check if already mounted
     is_mounted, current_mount = is_device_mounted(partition_path)
     if is_mounted:
         if current_mount == MOUNT_PATH:
-            logging.info(f"{partition_path} already mounted at {MOUNT_PATH}")
+            print(f"{partition_path} already mounted at {MOUNT_PATH}")
             return (device_name, partition_path)
         else:
-            logging.warning(f"{partition_path} already mounted at {current_mount}")
+            print(f"{partition_path} already mounted at {current_mount}")
             return (None, None)
 
     # Detect filesystem type
     fs_type = get_filesystem_type(partition_path)
 
     if not fs_type:
-        logging.error(f"Could not determine filesystem type for {partition_path}")
+        print(f"Could not determine filesystem type for {partition_path}")
         return (None, None)
 
-    logging.info(f"Detected filesystem: {fs_type}")
+    print(f"Detected filesystem: {fs_type}")
 
     # Mount the partition
     if mount_partition(partition_path, fs_type):
@@ -354,19 +342,19 @@ def check_device_health():
 
     # Check if device path still exists
     if not device_exists(mounted_partition):
-        logging.warning(f"Device {mounted_partition} has been disconnected!")
+        print(f"Device {mounted_partition} has been disconnected!")
         return False
 
     # Check if device is still mounted
     is_mounted, mount_point = is_device_mounted(mounted_partition)
     if not is_mounted:
-        logging.warning(f"Device {mounted_partition} is no longer mounted!")
+        print(f"Device {mounted_partition} is no longer mounted!")
         return False
 
     # Check if USB device is still present in system
     current_devices = get_usb_storage_devices()
     if mounted_device not in current_devices:
-        logging.warning(f"USB device {mounted_device} is no longer present!")
+        print(f"USB device {mounted_device} is no longer present!")
         return False
 
     return True
@@ -378,7 +366,7 @@ def handle_device_removal():
     """
     global mounted_device, mounted_partition
 
-    logging.info("Handling device removal...")
+    print("Handling device removal...")
 
     # Attempt to unmount (force if necessary, since device might be gone)
     if os.path.ismount(MOUNT_PATH):
@@ -388,7 +376,7 @@ def handle_device_removal():
     mounted_device = None
     mounted_partition = None
 
-    logging.info("Device removal handled, ready for new device")
+    print("Device removal handled, ready for new device")
 
 
 def main():
@@ -397,9 +385,9 @@ def main():
     """
     global mounted_device, mounted_partition
 
-    logging.info("USB SSD Auto-Mount Service Started")
-    logging.info(f"Mount path: {MOUNT_PATH}")
-    logging.info(f"Supported filesystems: ext4, ext3, ext2, NTFS, exFAT, FAT")
+    print("USB SSD Auto-Mount Service Started")
+    print(f"Mount path: {MOUNT_PATH}")
+    print(f"Supported filesystems: ext4, ext3, ext2, NTFS, exFAT, FAT")
 
     try:
         while True:
@@ -412,17 +400,17 @@ def main():
                 # Try to mount a USB device
                 device, partition = mount_usb_device()
                 if device:
-                    logging.info(f"Successfully mounted {partition} from device {device}")
+                    print(f"Successfully mounted {partition} from device {device}")
 
             # Sleep before next check
             time.sleep(POLL_INTERVAL)
 
     except KeyboardInterrupt:
-        logging.info("Received shutdown signal")
+        print("Received shutdown signal")
         if mounted_device:
             handle_device_removal()
     except Exception as e:
-        logging.error(f"Unexpected error in main loop: {e}")
+        print(f"Unexpected error in main loop: {e}")
         if mounted_device:
             handle_device_removal()
         raise
