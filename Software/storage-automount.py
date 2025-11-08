@@ -708,8 +708,8 @@ def _initial_scan():
         # Skip devices we already processed as partitions
         if any(devnode in d for d in others + raws):
             continue
-        # Skip SD cards and loop devices
-        if devnode.startswith(("/dev/mmcblk", "/dev/loop")):
+        # Skip SD cards, loop devices, and RAM disks
+        if devnode.startswith(("/dev/mmcblk", "/dev/loop", "/dev/ram")):
             continue
 
         label, fstype = _get_filesystem_info(devnode)
