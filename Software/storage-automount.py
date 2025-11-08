@@ -570,6 +570,21 @@ def _udev_worker():
             else:
                 _mount(devnode)
 
+        # Whole disk added/changed (no partition table)
+        elif action in ("add", "change") and devtype == "disk":
+            # Skip SD cards, loop devices, and RAM disks
+            if devnode.startswith(("/dev/mmcblk", "/dev/loop", "/dev/ram")):
+                continue
+
+            label, fstype = _get_filesystem_info(devnode)
+            if fstype:  # Has a filesystem on whole disk
+                log.info("Detected whole-disk filesystem on %s (%s)", devnode, fstype)
+                if label == "RAW":
+                    _register_raw_add(devnode)
+                    _switch_to_raw(devnode)
+                else:
+                    _mount(devnode)
+
         # Partition removed
         elif action == "remove" and devtype == "partition":
             _register_raw_remove(devnode)
@@ -641,6 +656,10 @@ def _cfe_hat_worker():
         last_state = bus.read_byte(I2C_ADDR)
     except OSError:
         pass
+
+    # Set LED based on initial state
+    ins_state = last_state & 1
+    _set_led(ins_state == 0)  # LED on if latch closed
 
     while True:
         try:
@@ -747,6 +766,46 @@ def _initial_scan():
 # ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
+def _cfe_hat_init():
+    """Initialize CFE HAT PCIe based on current latch state (before initial scan)."""
+    if not smbus:
+        return False
+
+    I2C_CH, I2C_ADDR = 1, 0x34
+    try:
+        bus = smbus.SMBus(I2C_CH)
+        state = bus.read_byte(I2C_ADDR)
+    except OSError:
+        return False  # CFE HAT not detected
+
+    def _pcie(bind: bool):
+        """Bind/unbind PCIe for CFE card."""
+        path = "/sys/bus/platform/drivers/brcm-pcie"
+        node = "1000110000.pcie"
+        target = "bind" if bind else "unbind"
+        try:
+            with open(f"{path}/{target}", "w") as f:
+                f.write(node)
+        except OSError as e:
+            if e.errno != errno.EBUSY:
+                log.debug("PCIe %s error: %s", target, e)
+        if bind:
+            time.sleep(0.5)
+            subprocess.call(["sh", "-c", "echo 1 > /sys/bus/pci/rescan"],
+                          stderr=subprocess.DEVNULL)
+
+    # Initialize PCIe based on latch state
+    ins_state = state & 1
+    if ins_state == 0:  # Latch is closed (button released)
+        log.info("CFexpress card detected at startup, initializing PCIe...")
+        _pcie(True)
+        time.sleep(1.5)  # Wait for device enumeration
+    else:  # Latch is open (button pressed)
+        log.info("CFexpress card slot empty at startup")
+        _pcie(False)
+
+    return True
+
 def main():
     def _sigterm(_sig, _frame):
         log.info("SIGTERM received, unmounting all devices")
@@ -760,6 +819,9 @@ def main():
     log.info("Mount base: %s", MOUNT_BASE)
     log.info("User: %d:%d", PI_UID, PI_GID)
     log.info("Log level: %s", LOG_LEVEL)
+
+    # Initialize CFE HAT PCIe before scanning
+    _cfe_hat_init()
 
     _initial_scan()
 
