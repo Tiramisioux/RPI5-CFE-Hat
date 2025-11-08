@@ -1,0 +1,23 @@
+[Unit]
+Description=USB SSD Auto-Mount Service
+After=multi-user.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/user/RPI5-CFE-Hat/Software/usb_ssd_automount.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+User=root
+
+# Security settings (optional, but recommended)
+# Uncomment these for enhanced security
+#NoNewPrivileges=true
+#PrivateTmp=true
+#ProtectSystem=strict
+#ReadWritePaths=/media/USB_SSD /var/log
+
+[Install]
+WantedBy=multi-user.target
