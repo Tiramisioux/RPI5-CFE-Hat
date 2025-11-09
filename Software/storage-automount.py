@@ -190,7 +190,7 @@ def _get_filesystem_info(dev: str, retries: int = 5, delay: float = 0.5) -> tupl
 def _classify_media(devnode: str) -> str:
     """Classify device as: cfe_nvme, usb_nvme, usb_ssd, nvme_hat, or other."""
     try:
-        device = pyudev.Device.from_device_file(_udev_ctx, devnode)
+        device = pyudev.Devices.from_device_file(_udev_ctx, devnode)
     except Exception:
         return "other"
 
