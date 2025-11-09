@@ -443,19 +443,16 @@ def _unmount(dev: str):
         return
 
     log.info("Unmounting %s from %s", dev, mount_path)
+    log.debug("Starting non-blocking lazy unmount...")
 
-    # Try normal unmount
-    if subprocess.call(["umount", dev], stderr=subprocess.DEVNULL) == 0:
-        log.info("✓ Unmounted %s", dev)
-    else:
-        # Try lazy unmount
-        log.warning("Normal unmount failed, trying lazy unmount")
-        subprocess.call(["umount", "-l", str(mount_path)], stderr=subprocess.DEVNULL)
+    # Use Popen for non-blocking unmount (umount can block for 30+ seconds)
+    subprocess.Popen(["umount", "-l", str(mount_path)], stderr=subprocess.DEVNULL)
 
-    # Clean up mount point
+    # Clean up mount point (may fail if still mounted, that's OK)
     try:
         if not any(mount_path.iterdir()):
             mount_path.rmdir()
+            log.debug("Removed mount point: %s", mount_path)
     except OSError:
         pass
 
