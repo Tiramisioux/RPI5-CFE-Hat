@@ -706,8 +706,9 @@ def _cfe_hat_worker():
                         _active_raw = None
             _pcie(False)
             _set_led(False)
-            _purge_stale_mountpoints()
             _restore_sysctls()
+            # Note: Skip _purge_stale_mountpoints() here as os.path.ismount()
+            # can block for 30+ seconds on stale mounts, freezing button detection
 
         # INSERT released - power up and mount
         if ins_prev == 1 and ins_now == 0:
