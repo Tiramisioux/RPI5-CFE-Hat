@@ -695,8 +695,10 @@ def _cfe_hat_worker():
             nvme_devices = [dev for dev in list(_mounts) if dev.startswith("/dev/nvme")]
             for dev in nvme_devices:
                 log.info("Unmounting CFE device %s from %s", dev, _mounts[dev])
+                log.debug("Calling umount -l...")
                 subprocess.call(["umount", "-l", str(_mounts[dev])],
                               stderr=subprocess.DEVNULL)
+                log.debug("Umount complete, cleaning up state...")
                 _mounts.pop(dev, None)
                 _active_mount_kinds.pop(dev, None)
                 _register_raw_remove(dev)
@@ -704,9 +706,13 @@ def _cfe_hat_worker():
                     global _active_raw
                     if dev == _active_raw:
                         _active_raw = None
+            log.debug("Powering down PCIe...")
             _pcie(False)
+            log.debug("Setting LED off...")
             _set_led(False)
+            log.debug("Restoring sysctls...")
             _restore_sysctls()
+            log.debug("CFE latch open handling complete")
             # Note: Skip _purge_stale_mountpoints() here as os.path.ismount()
             # can block for 30+ seconds on stale mounts, freezing button detection
 
