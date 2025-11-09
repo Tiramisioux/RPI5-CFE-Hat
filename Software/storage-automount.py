@@ -68,7 +68,7 @@ _active_mount_kinds: dict[str, str] = {}  # devnode → media kind
 _failed_devices: dict[str, float] = {}  # devnode → timestamp (cooldown)
 _raw_pool: list[str] = []  # devices with LABEL=RAW
 _active_raw: str | None = None
-_raw_lock = threading.Lock()
+_raw_lock = threading.RLock()  # Reentrant lock to allow nested acquisition
 _sysctl_saved: dict[str, str | None] = {}
 _udev_ctx = pyudev.Context()
 
