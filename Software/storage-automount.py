@@ -695,10 +695,11 @@ def _cfe_hat_worker():
             nvme_devices = [dev for dev in list(_mounts) if dev.startswith("/dev/nvme")]
             for dev in nvme_devices:
                 log.info("Unmounting CFE device %s from %s", dev, _mounts[dev])
-                log.debug("Calling umount -l...")
-                subprocess.call(["umount", "-l", str(_mounts[dev])],
-                              stderr=subprocess.DEVNULL)
-                log.debug("Umount complete, cleaning up state...")
+                log.debug("Starting non-blocking lazy unmount...")
+                # Use Popen to not wait for umount completion (it can block for 30+ seconds)
+                subprocess.Popen(["umount", "-l", str(_mounts[dev])],
+                               stderr=subprocess.DEVNULL)
+                log.debug("Umount started, cleaning up state...")
                 _mounts.pop(dev, None)
                 _active_mount_kinds.pop(dev, None)
                 _register_raw_remove(dev)
