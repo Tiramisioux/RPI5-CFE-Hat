@@ -515,6 +515,11 @@ def _sanity_watchdog():
     """Health check: detect yanked drives via statvfs errors."""
     while True:
         for dev, mp in list(_mounts.items()):
+            # Skip SD card devices - they're not managed by this script
+            # and statvfs can block for 30+ seconds on bad SD card mounts
+            if dev.startswith("/dev/mmcblk"):
+                continue
+
             try:
                 os.statvfs(mp)
             except OSError as exc:
