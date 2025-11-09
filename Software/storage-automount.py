@@ -701,30 +701,37 @@ def _cfe_hat_worker():
             _set_led(True)
 
             # Wait for device enumeration and manually scan for new NVMe devices
-            time.sleep(1.5)
+            time.sleep(0.8)
+
+            # Collect partitions and whole disks separately
+            nvme_partitions = []
+            nvme_disks = []
             for device in _udev_ctx.list_devices(subsystem="block"):
                 devnode = device.device_node
                 if not devnode or not devnode.startswith("/dev/nvme"):
                     continue
-
-                # Skip if already mounted
                 if devnode in _mounts:
                     continue
 
                 devtype = device.get("DEVTYPE")
-
-                # Handle partition
                 if devtype == "partition":
-                    label, _ = _get_filesystem_info(devnode)
-                    if label == "RAW":
-                        _register_raw_add(devnode)
-                        _switch_to_raw(devnode)
-                    else:
-                        _mount(devnode)
-
-                # Handle whole disk
+                    nvme_partitions.append(devnode)
                 elif devtype == "disk":
-                    label, fstype = _get_filesystem_info(devnode)
+                    nvme_disks.append(devnode)
+
+            # Mount partitions first
+            for devnode in nvme_partitions:
+                label, _ = _get_filesystem_info(devnode, retries=3, delay=0.3)
+                if label == "RAW":
+                    _register_raw_add(devnode)
+                    _switch_to_raw(devnode)
+                else:
+                    _mount(devnode)
+
+            # Only check whole disks if no partitions were found
+            if not nvme_partitions:
+                for devnode in nvme_disks:
+                    label, fstype = _get_filesystem_info(devnode, retries=3, delay=0.3)
                     if fstype:
                         log.info("Detected whole-disk filesystem on %s (%s)", devnode, fstype)
                         if label == "RAW":
@@ -838,7 +845,7 @@ def _cfe_hat_init():
     if ins_state == 0:  # Latch is closed (button released)
         log.info("CFexpress card detected at startup, initializing PCIe...")
         _pcie(True)
-        time.sleep(1.5)  # Wait for device enumeration
+        time.sleep(0.8)  # Wait for device enumeration
     else:  # Latch is open (button pressed)
         log.info("CFexpress card slot empty at startup")
         _pcie(False)
