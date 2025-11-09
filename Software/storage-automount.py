@@ -667,7 +667,8 @@ def _cfe_hat_worker():
     while True:
         try:
             raw = bus.read_byte(I2C_ADDR)
-        except OSError:
+        except OSError as e:
+            log.debug("I2C read error: %s", e)
             time.sleep(0.1)
             continue
 
@@ -675,6 +676,12 @@ def _cfe_hat_worker():
         ej_now = (raw >> 1) & 1
         ins_prev = last_state & 1
         ej_prev = (last_state >> 1) & 1
+
+        # Log state changes for debugging
+        if raw != last_state:
+            log.debug("Button state change: 0x%02x → 0x%02x (ins=%d, ej=%d)",
+                     last_state, raw, ins_now, ej_now)
+
         last_state = raw
 
         # INSERT pressed (latch open) - pre-emptive unmount
