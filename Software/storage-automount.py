@@ -712,17 +712,22 @@ def _cfe_hat_worker():
         # INSERT released - power up and mount
         if ins_prev == 1 and ins_now == 0:
             log.info("CFexpress card status: INSERTED (latch closed)")
+            log.debug("Powering up PCIe...")
             _pcie(True)
+            log.debug("Setting LED on...")
             _set_led(True)
 
             # Clear failed device cooldown for NVMe devices (explicit user action)
             global _failed_devices
             _failed_devices = {k: v for k, v in _failed_devices.items()
                              if not k.startswith("/dev/nvme")}
+            log.debug("Cleared NVMe device cooldowns")
 
             # Wait for device enumeration and manually scan for new NVMe devices
+            log.debug("Waiting 0.8s for device enumeration...")
             time.sleep(0.8)
 
+            log.debug("Scanning for NVMe devices...")
             # Collect partitions and whole disks separately
             nvme_partitions = []
             nvme_disks = []
@@ -735,13 +740,19 @@ def _cfe_hat_worker():
 
                 devtype = device.get("DEVTYPE")
                 if devtype == "partition":
+                    log.debug("Found NVMe partition: %s", devnode)
                     nvme_partitions.append(devnode)
                 elif devtype == "disk":
+                    log.debug("Found NVMe disk: %s", devnode)
                     nvme_disks.append(devnode)
+
+            log.debug("Found %d partitions, %d disks", len(nvme_partitions), len(nvme_disks))
 
             # Mount partitions first
             for devnode in nvme_partitions:
+                log.debug("Checking filesystem on %s...", devnode)
                 label, _ = _get_filesystem_info(devnode, retries=3, delay=0.3)
+                log.debug("Label: %s", label)
                 if label == "RAW":
                     _register_raw_add(devnode)
                     _switch_to_raw(devnode)
@@ -750,7 +761,9 @@ def _cfe_hat_worker():
 
             # Only check whole disks if no partitions were found
             if not nvme_partitions:
+                log.debug("No partitions found, checking whole disks...")
                 for devnode in nvme_disks:
+                    log.debug("Checking filesystem on whole disk %s...", devnode)
                     label, fstype = _get_filesystem_info(devnode, retries=3, delay=0.3)
                     if fstype:
                         log.info("Detected whole-disk filesystem on %s (%s)", devnode, fstype)
@@ -759,6 +772,10 @@ def _cfe_hat_worker():
                             _switch_to_raw(devnode)
                         else:
                             _mount(devnode)
+            else:
+                log.debug("Skipping whole disk check (partitions exist)")
+
+            log.debug("CFE latch close handling complete")
 
         # EJECT released - unmount all
         if ej_prev == 1 and ej_now == 0:
