@@ -339,6 +339,9 @@ def _mount(dev: str):
 
     # Check cooldown
     if dev in _failed_devices:
+        remaining = 30 - (time.time() - _failed_devices[dev])
+        if remaining > 0:
+            log.debug("%s in cooldown, %d seconds remaining", dev, int(remaining))
         return
 
     # Already mounted by us
@@ -699,6 +702,11 @@ def _cfe_hat_worker():
             log.info("CFexpress card status: INSERTED (latch closed)")
             _pcie(True)
             _set_led(True)
+
+            # Clear failed device cooldown for NVMe devices (explicit user action)
+            global _failed_devices
+            _failed_devices = {k: v for k, v in _failed_devices.items()
+                             if not k.startswith("/dev/nvme")}
 
             # Wait for device enumeration and manually scan for new NVMe devices
             time.sleep(0.8)
