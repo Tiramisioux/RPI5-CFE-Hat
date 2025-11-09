@@ -289,12 +289,17 @@ def _apply_sysctl_cushions(kind: str):
 
 def _restore_sysctls():
     """Restore original sysctl values when no mounts remain."""
+    log.debug("_restore_sysctls called, checking if restore needed...")
     if _active_mount_kinds or not _sysctl_saved:
+        log.debug("Skipping sysctl restore (active_kinds=%s, saved=%s)",
+                 len(_active_mount_kinds), bool(_sysctl_saved))
         return
+    log.debug("Restoring %d sysctl values...", len(_sysctl_saved))
     for k, v in _sysctl_saved.items():
         if v:
             _sysctl_set(k, v)
     log.info("Restored default sysctl values")
+    log.debug("Sysctl restore complete")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Auto-repair
@@ -457,7 +462,9 @@ def _unmount(dev: str):
         pass
 
     # Restore sysctls if no mounts remain
+    log.debug("Calling _restore_sysctls...")
     _restore_sysctls()
+    log.debug("_unmount complete for %s", dev)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RAW Arbitration
@@ -592,12 +599,19 @@ def _udev_worker():
 
         # Partition removed
         elif action == "remove" and devtype == "partition":
+            log.debug("Partition removed: %s", devnode)
             _register_raw_remove(devnode)
+            log.debug("Calling _unmount for %s", devnode)
             _unmount(devnode)
+            log.debug("Unmount call returned")
             with _raw_lock:
                 if devnode == _active_raw:
+                    log.debug("Was active RAW, checking for fallback...")
                     fallback = _raw_pool[-1] if _raw_pool else None
+                    log.debug("Fallback device: %s", fallback)
                     _switch_to_raw(fallback)
+                    log.debug("RAW switch complete")
+            log.debug("Partition removal handling complete")
 
         # Whole disk removed
         elif action == "remove" and devtype == "disk":
