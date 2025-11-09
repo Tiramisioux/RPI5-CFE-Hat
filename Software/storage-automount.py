@@ -677,22 +677,61 @@ def _cfe_hat_worker():
         # INSERT pressed (latch open) - pre-emptive unmount
         if ins_prev == 0 and ins_now == 1:
             log.info("CFexpress card status: REMOVED (latch opened)")
-            for dev in list(_mounts):
-                if dev.startswith("/dev/nvme"):
-                    subprocess.call(["umount", "-l", str(_mounts[dev])],
-                                  stderr=subprocess.DEVNULL)
-                    _mounts.pop(dev, None)
-                    _active_mount_kinds.pop(dev, None)
-                    _register_raw_remove(dev)
+            nvme_devices = [dev for dev in list(_mounts) if dev.startswith("/dev/nvme")]
+            for dev in nvme_devices:
+                log.info("Unmounting CFE device %s from %s", dev, _mounts[dev])
+                subprocess.call(["umount", "-l", str(_mounts[dev])],
+                              stderr=subprocess.DEVNULL)
+                _mounts.pop(dev, None)
+                _active_mount_kinds.pop(dev, None)
+                _register_raw_remove(dev)
+                with _raw_lock:
+                    global _active_raw
+                    if dev == _active_raw:
+                        _active_raw = None
             _pcie(False)
             _set_led(False)
             _purge_stale_mountpoints()
+            _restore_sysctls()
 
         # INSERT released - power up and mount
         if ins_prev == 1 and ins_now == 0:
             log.info("CFexpress card status: INSERTED (latch closed)")
             _pcie(True)
             _set_led(True)
+
+            # Wait for device enumeration and manually scan for new NVMe devices
+            time.sleep(1.5)
+            for device in _udev_ctx.list_devices(subsystem="block"):
+                devnode = device.device_node
+                if not devnode or not devnode.startswith("/dev/nvme"):
+                    continue
+
+                # Skip if already mounted
+                if devnode in _mounts:
+                    continue
+
+                devtype = device.get("DEVTYPE")
+
+                # Handle partition
+                if devtype == "partition":
+                    label, _ = _get_filesystem_info(devnode)
+                    if label == "RAW":
+                        _register_raw_add(devnode)
+                        _switch_to_raw(devnode)
+                    else:
+                        _mount(devnode)
+
+                # Handle whole disk
+                elif devtype == "disk":
+                    label, fstype = _get_filesystem_info(devnode)
+                    if fstype:
+                        log.info("Detected whole-disk filesystem on %s (%s)", devnode, fstype)
+                        if label == "RAW":
+                            _register_raw_add(devnode)
+                            _switch_to_raw(devnode)
+                        else:
+                            _mount(devnode)
 
         # EJECT released - unmount all
         if ej_prev == 1 and ej_now == 0:
